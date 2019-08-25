@@ -11,7 +11,8 @@
 #ifndef ADI_AXI_ADC_H_
 #define ADI_AXI_ADC_H_
 
-#include <linux/fpga/adi-axi-common.h>
+//#include "linux/fpga/adi-axi-common.h"
+#include "adi-axi-common.h"
 
 /* ADC COMMON */
 
@@ -173,7 +174,8 @@ enum adc_data_sel {
 #define AXIADC_MAX_CHANNEL		16
 
 #include <linux/spi/spi.h>
-#include <linux/clk/clkscale.h>
+//#include <linux/clk/clkscale.h>
+#include "clkscale.h"
 
 struct axiadc_chip_info {
 	char				*name;
