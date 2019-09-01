@@ -6,6 +6,10 @@
 
 [adi 9009 wiki](https://wiki.analog.com/resources/tools-software/linux-drivers/iio-transceiver/adrv9009)
 
+[adi 9009 app Talise-API](https://www.analog.com/en/design-center/landing-pages/001/transceiver-evaluation-software.html)
+
+[talise-api release](https://www.analog.com/media/en/evaluation-boards-kits/evaluation-software/Talise_Release_6-0_Customer_%20Release_%20Notes_3-6-0-6.pdf)
+
 ```
 Linux Kernel Configuration
 	Device Drivers  --->
