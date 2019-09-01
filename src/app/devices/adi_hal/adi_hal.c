@@ -17,6 +17,15 @@
 #include "zynq_platform.h"
 #endif
 
+#include <linux/spi/spidev.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+#include <sys/ioctl.h>
+
 adiHalErr_t ADIHAL_setTimeout(void *devHalInfo, uint32_t halTimeout_ms)
 {
     adiHalErr_t retVal = ADIHAL_OK;
@@ -35,7 +44,33 @@ adiHalErr_t ADIHAL_setTimeout(void *devHalInfo, uint32_t halTimeout_ms)
 adiHalErr_t ADIHAL_openHw(void *devHalInfo, uint32_t halTimeout_ms)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    char        dev_node[16];
+    int fd = 0;
+    int ret = 0;
+    int mode = 0, bits = 16, speed = 100 * 1000 * 1000;
 
+    sprintf(dev_node, "/dev/spidev%d.0", 1);
+    fd = open(dev_node, O_RDWR);
+    if (fd < 0) {
+        perror("open");
+        return retVal=ADIHAL_SPI_FAIL;
+    }
+    *(int *)devHalInfo = fd;
+    ret = ioctl(fd, SPI_IOC_WR_MODE, &mode);
+    if (ret < 0) {
+        perror("SPI_IOC_WR_MODE");
+        return retVal=ADIHAL_SPI_FAIL;
+    }
+    ret = ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits);
+    if (ret < 0) {
+        perror("SPI_IOC_WR_BITS_PER_WORD");
+        return retVal=ADIHAL_SPI_FAIL;
+    }
+    ret = ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed);
+    if (ret < 0) {
+        perror("SPI_IOC_WR_MAX_SPEED_HZ");
+        return retVal=ADIHAL_SPI_FAIL;
+    }
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -79,6 +114,9 @@ adiHalErr_t ADIHAL_openHw(void *devHalInfo, uint32_t halTimeout_ms)
 adiHalErr_t ADIHAL_closeHw(void *devHalInfo)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    int fd = 0;
+    fd = *(int *)devHalInfo;
+    close(fd);
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -146,6 +184,26 @@ adiHalErr_t ADIHAL_resetHw(void *devHalInfo)
 adiHalErr_t  ADIHAL_spiWriteByte(void *devHalInfo, uint16_t addr, uint8_t data)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    int fd = *(int *)devHalInfo;
+    struct spi_ioc_transfer tr;
+    unsigned char txbuf[2];
+    int ret = 0;
+    
+    memset(&tr, 0, sizeof(tr));
+
+    txbuf[0] = (addr >> 8) & 0x7F;                                 
+    txbuf[1] = addr & 0xFF;
+    txbuf[2] = data;
+    tr.len = 3;
+    tr.tx_buf = (long long)txbuf;
+//    tr.bits_per_word = bits;
+
+    ret = ioctl(fd, SPI_IOC_MESSAGE(1), &tr);
+    if (ret < 1)
+    {
+        perror("can't send spi message");
+        retVal = ADIHAL_SPI_FAIL;
+    }
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -178,6 +236,13 @@ adiHalErr_t  ADIHAL_spiWriteByte(void *devHalInfo, uint16_t addr, uint8_t data)
 adiHalErr_t  ADIHAL_spiWriteBytes(void *devHalInfo, uint16_t *addr, uint8_t *data, uint32_t count)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    int i;             
+
+    for (i = 0; i < count; i++) {
+        retVal = ADIHAL_spiWriteByte(devHalInfo, addr[i], data[i]);
+        if (retVal)    
+            return retVal;
+    }           
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -215,6 +280,27 @@ adiHalErr_t  ADIHAL_spiWriteBytes(void *devHalInfo, uint16_t *addr, uint8_t *dat
 adiHalErr_t ADIHAL_spiReadByte(void *devHalInfo, uint16_t addr, uint8_t *readdata)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    int fd = *(int *)devHalInfo;
+    struct spi_ioc_transfer tr[2];
+    unsigned char txbuf[2];
+    uint8_t data; 
+    int ret = 0;
+    
+    memset(tr, 0, sizeof(tr));
+
+    txbuf[0] = (0x1<<7) | ((addr >> 8) & 0x7F);                                 
+    txbuf[1] = addr & 0xFF;
+    tr[0].len = 2;
+    tr[0].tx_buf = (long long)txbuf;
+    tr[1].len = 1;
+    tr[1].rx_buf = (long long)&data;
+
+    ret = ioctl(fd, SPI_IOC_MESSAGE(2), &tr);
+    if (ret < 1)
+    {
+        perror("can't send spi message");
+        retVal = ADIHAL_SPI_FAIL;
+    }
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -246,6 +332,13 @@ adiHalErr_t ADIHAL_spiReadByte(void *devHalInfo, uint16_t addr, uint8_t *readdat
 adiHalErr_t ADIHAL_spiReadBytes(void *devHalInfo, uint16_t *addr, uint8_t *readdata, uint32_t count)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    int i;              
+    
+   for (i = 0; i < count; i++) {
+       retVal = ADIHAL_spiReadByte(devHalInfo, addr[i], &readdata[i]);
+       if (retVal)     
+           return retVal;
+  }              
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
@@ -283,6 +376,21 @@ adiHalErr_t ADIHAL_spiWriteField(void *devHalInfo,
         uint16_t addr, uint8_t fieldVal, uint8_t mask, uint8_t startBit)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    uint8_t readVal;
+
+    retVal = ADIHAL_spiReadByte(devHalInfo, addr, &readVal);                      
+    if (retVal < 0)
+        return retVal;
+    readVal = (readVal & ~mask) | ((fieldVal << startBit) & mask);
+                 
+//    if (devHalData->logLevel & ADIHAL_LOG_SPI)
+//    {          
+//        printf("SPIWriteField: ADDR:0x%03X, FIELDVAL:0x%02X  , MASK:0x%02X, STARTBIT:%d\n",
+//                        addr, fieldVal, mask, startBit);
+//    }          
+                       
+    return ADIHAL_spiWriteByte(devHalInfo, addr, readVal);
+
 #ifdef ADI_ZYNQ_PLATFORM
     uint8_t readVal = 0;
     int32_t error = 0;
@@ -318,12 +426,26 @@ adiHalErr_t ADIHAL_spiWriteField(void *devHalInfo,
     }
 #endif
 
-    return (retVal);
+//    return (retVal);
 }
 
 adiHalErr_t ADIHAL_spiReadField(void *devHalInfo, uint16_t addr, uint8_t *fieldVal, uint8_t mask, uint8_t startBit)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    uint8_t readVal;
+                    
+    retVal = ADIHAL_spiReadByte(devHalInfo, addr, &readVal);
+    if (retVal < 0)
+        return retVal;
+                                
+    *fieldVal = ((readVal & mask) >> startBit);
+                                      
+//    if(devHalData->logLevel & ADIHAL_LOG_SPI)
+//    {          
+//        printf("SPIReadField: ADDR:0x%03X, MASK:0x%02X, STA  RTBIT:%d, FieldVal:0x%02X\n",
+//                addr, mask, startBit, *fieldVal);
+//    }          
+
 #ifdef ADI_ZYNQ_PLATFORM
 
     uint8_t readVal = 0;
@@ -358,6 +480,7 @@ adiHalErr_t ADIHAL_spiReadField(void *devHalInfo, uint16_t addr, uint8_t *fieldV
 adiHalErr_t  ADIHAL_wait_us(void *devHalInfo, uint32_t time_us)
 {
     adiHalErr_t retVal = ADIHAL_OK;
+    usleep(time_us);
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
