@@ -301,6 +301,10 @@ adiHalErr_t ADIHAL_spiReadByte(void *devHalInfo, uint16_t addr, uint8_t *readdat
         perror("can't send spi message");
         retVal = ADIHAL_SPI_FAIL;
     }
+    else
+    {
+        readdata = data;
+    }
 #ifdef ADI_ZYNQ_PLATFORM
     int32_t error = 0;
     zynqAdiDev_t *devHalData = (zynqAdiDev_t *)devHalInfo;
